@@ -4,11 +4,26 @@ X = 1
 O = -1
 
 PLAYER_TO_NAME = {
-  -1 => "O",
-  1 =>  "X"
+  O => "O",
+  X =>  "X"
+}
+
+PLAYER_TO_COLOR = {
+  O => :purple,
+  X => :red
 }
 
 NAME_TO_PLAYER = PLAYER_TO_NAME.invert
+
+class String
+  def purple
+    "\033[35;1m#{self}\033[0m"
+  end
+
+  def red
+    "\033[31;1m#{self}\033[0m"
+  end
+end
 
 class InvalidMoveError < StandardError; end
 class AlreadyTakenError < StandardError; end
@@ -61,7 +76,7 @@ class Board
 
       [0, 3, 6],
       [1, 4, 7],
-      [2, 5, 7],
+      [2, 5, 8],
 
       [0, 4, 8],
       [2, 4, 6],
@@ -76,51 +91,95 @@ class Board
     END
   end
 
+  def to_formatted_s
+    <<~END
+    #{c(0)} #{c(1)} #{c(2)}
+    #{c(3)} #{c(4)} #{c(5)}
+    #{c(6)} #{c(7)} #{c(8)}
+    END
+  end
+
+  def valid_moves
+    (1..9).filter { |i| @storage[i-1] == 0 }
+  end
+
   private
 
   def b(idx)
     PLAYER_TO_NAME[@storage[idx]] || idx+1
   end
+
+  def c(idx)
+    player = @storage[idx]
+
+    if player == 0
+      idx+1
+    else
+      PLAYER_TO_NAME[player].send(PLAYER_TO_COLOR[player])
+    end
+  end
 end
+
+class KeyboardSource
+  def make_move(player, board)
+    loop do
+      print "#{PLAYER_TO_NAME[player].send(PLAYER_TO_COLOR[player])}’s turn. Enter move: "
+
+      input = gets.chomp
+      move = input.to_i
+
+      begin
+        board.make_move(player, move)
+        puts
+        break
+      rescue InvalidMoveError => e
+        puts
+        puts "`#{input}' is not a valid move. Please try again."
+        puts
+      rescue AlreadyTakenError => e
+        puts
+        puts "#{move} is already taken. Please pick another space."
+        puts
+      end
+    end
+  end
+end
+
+class RandomSource
+  def make_move(player, board)
+    sleep(0.5)
+    move = board.valid_moves.sample
+    board.make_move(player, move)
+    puts "#{PLAYER_TO_NAME[player].send(PLAYER_TO_COLOR[player])} (computer) marks #{move}."
+    puts
+  end
+end
+
+MOVE_SOURCES = {
+  X => RandomSource.new,
+  O => RandomSource.new,
+}
 
 board = Board.new
 player = X
 
+
 until board.game_over?
-  puts board
+  puts board.to_formatted_s
   puts
 
-  loop do
-    print "#{PLAYER_TO_NAME[player]}’s turn. Enter move: "
-
-    input = gets.chomp
-    move = input.to_i
-
-    begin
-      board.make_move(player, move)
-      puts
-      break
-    rescue InvalidMoveError => e
-      puts
-      puts "`#{input}' is not a valid move. Please try again."
-      puts
-    rescue AlreadyTakenError => e
-      puts
-      puts "#{move} is already taken. Please pick another space."
-      puts
-    end
-  end
+  MOVE_SOURCES[player].make_move(player, board)
 
   player *= -1
 end
 
 winner = board.winner
 
-puts board
+puts board.to_formatted_s
 puts
 
 if winner
-  puts "#{PLAYER_TO_NAME[winner]} won!"
+  puts "#{PLAYER_TO_NAME[winner].send(PLAYER_TO_COLOR[winner])} won!"
 else
   puts "It's a tie."
 end
